@@ -1,0 +1,127 @@
+{
+  "Comment": "Ticket processing workflow with S3 storage",
+  "StartAt": "DetectSentiment",
+  "QueryLanguage": "JSONPath",
+  "States": {
+    "DetectSentiment": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::aws-sdk:comprehend:detectSentiment",
+      "InputPath": "$.ticket",
+      "Parameters": {
+        "LanguageCode": "en",
+        "Text.$": "$.data.description"
+      },
+      "ResultPath": "$.ComprehendResult",
+      "Next": "ResponseGenerator"
+    },
+    "ResponseGenerator": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${ResponseGeneratorArn}",
+        "Payload.$": "$"
+      },
+      "ResultSelector": {
+        "Payload.$": "$.Payload"
+      },
+      "ResultPath": "$.ResponseGenerator",
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException",
+            "Lambda.SdkClientException",
+            "Lambda.TooManyRequestsException"
+          ],
+          "IntervalSeconds": 1,
+          "MaxAttempts": 3,
+          "BackoffRate": 2,
+          "JitterStrategy": "FULL"
+        }
+      ],
+      "Next": "ParallelStorage"
+    },
+    "ParallelStorage": {
+      "Type": "Parallel",
+      "Branches": [
+        {
+          "StartAt": "WriteTicketToDDB",
+          "States": {
+            "WriteTicketToDDB": {
+              "Type": "Task",
+              "Resource": "arn:aws:states:::dynamodb:putItem",
+              "Parameters": {
+                "TableName": "${TicketsTableName}",
+                "Item": {
+                  "ticket_id": { "S.$": "$.ticket.ticketId" },
+                  "submitted_at": { "S.$": "$.ticket.submittedAt" },
+                  "customer_name": { "S.$": "$.ticket.data.customer_contact_information.full_name" },
+                  "customer_email": { "S.$": "$.ticket.data.customer_contact_information.email" },
+                  "product": { "S.$": "$.ticket.data.product_issue_information.product" },
+                  "issue_type": { "S.$": "$.ticket.data.product_issue_information.issue_type" },
+                  "subject": { "S.$": "$.ticket.data.subject" },
+                  "description": { "S.$": "$.ticket.data.description" },
+                  "sentiment": { "S.$": "$.ComprehendResult.Sentiment" },
+                  "sentiment_score": {
+                    "M": {
+                      "Mixed": { "N.$": "States.Format('{}', $.ComprehendResult.SentimentScore.Mixed)" },
+                      "Negative": { "N.$": "States.Format('{}', $.ComprehendResult.SentimentScore.Negative)" },
+                      "Neutral": { "N.$": "States.Format('{}', $.ComprehendResult.SentimentScore.Neutral)" },
+                      "Positive": { "N.$": "States.Format('{}', $.ComprehendResult.SentimentScore.Positive)" }
+                    }
+                  },
+                  "response_text": { "S.$": "$.ResponseGenerator.Payload.response" },
+                  "priority": { "S.$": "$.ResponseGenerator.Payload.priority" },
+                  "priority_reasoning": { "S.$": "$.ResponseGenerator.Payload.priority_reasoning" }
+                }
+              },
+              "ResultPath": null,
+              "End": true
+            }
+          }
+        },
+        {
+          "StartAt": "SaveToS3",
+          "States": {
+            "SaveToS3": {
+              "Type": "Task",
+              "Resource": "arn:aws:states:::lambda:invoke",
+              "Parameters": {
+                "FunctionName": "${S3WriterArn}",
+                "Payload.$": "$"
+              },
+              "End": true
+            }
+          }
+        }
+      ],
+      "Next": "CheckPriority",
+      "ResultPath": null
+    },
+    "CheckPriority": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.ResponseGenerator.Payload.priority",
+          "StringEquals": "HIGH",
+          "Next": "PublishHighPriorityNotification"
+        }
+      ],
+      "Default": "Done"
+    },
+    "PublishHighPriorityNotification": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::sns:publish",
+      "Parameters": {
+        "TopicArn": "${NotificationTopicArn}",
+        "Subject": "High Priority Ticket Alert",
+        "Message.$": "States.Format('HIGH priority ticket detected {} submitted at {}: {}', $.ticket.ticketId, $.ticket.submittedAt, $.ResponseGenerator.Payload.priority_reasoning)"
+      },
+      "End": true
+    },
+    "Done": {
+      "Type": "Pass",
+      "End": true
+    }
+  }
+}
