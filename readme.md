@@ -13,7 +13,7 @@ This project provides an end-to-end **ticket management system** built with the 
 3. **Analyze sentiment** using Amazon Comprehend
 4. **Generate automated responses** via Bedrock LLM (in a Lambda)
 5. **Persist** metadata in **DynamoDB** and full JSON in **S3**
-6. **Notify** stakeholders and teams with **SNS**
+6. **Notify** stakeholders with **SNS**
 7. **ETL** all data into **Amazon Redshift** via an **AWS Glue** job
 8. **Monitor** failures with **CloudWatch Alarms**
 
@@ -216,17 +216,55 @@ Before deploying this stack, make sure the following AWS resources **already exi
 5. **Email Addresses** for Notifications
    - Any valid email(s) that should receive SNS alerts on workflow failures.
 
+6. **AWS CLI** with proper IAM rights
+   - Install the AWS CLI (v2) and configure it with `aws configure` or environment variables.
+   - The CLI credentials must have permissions to bootstrap/pulldown CDK resources and manage: Kinesis, Lambda, Step Functions, DynamoDB, S3, SNS, Glue, EventBridge, CloudWatch, and Redshift.
+
+7. **Node.js (v16+) & AWS CDK v2**
+   - Install Node.js version 16 or higher.
+   - Install the AWS CDK v2 globally (`npm install -g aws-cdk`).
+   - This provides the `cdk` command for synthesizing and deploying the infrastructure.
+
+8. **Python 3.11 & Virtual Environment**
+   - Ensure Python 3.11 is installed on your system.
+   - Create and activate a virtual environment (`python3.11 -m venv .venv` & `source .venv/bin/activate`).
+   - Install Python dependencies with `pip install -r requirements.txt`.
+
+9. **Docker (optional, for local Lambda testing)**
+   - If you want to test Lambdas locally (`cdk synth`, `cdk deploy --watch`), install Docker.
+   - CDK can use Docker to build and emulate Lambda runtimes, ensuring compatibility with AWS.
+
 Once these prerequisites are in place, continue with the setup steps below.
 
-## 🔧 Prerequisites & Setup
+**Environment Variables (`.env`):**
 
+```bash
+# Redshift connection URL (JDBC)
+REDSHIFT_JDBC_CONNECTION_URL=<YOUR_REDSHIFT_JDBC_URL>
 
-1. **AWS CLI** with proper IAM rights
-2. **Node.js** (v16+) and **AWS CDK v2**
-3. **Python 3.11** & virtual environment
-4. **Docker** (optional, for local Lambda testing)
+# Redshift cluster ARN for Glue authentication
+REDSHIFT_ARN=<YOUR_REDSHIFT_CLUSTER_ARN>
 
-**Environment Variables (**``**):**
+# Credentials to log in to Redshift
+REDSHIFT_USERNAME=<YOUR_REDSHIFT_USERNAME>
+REDSHIFT_PASSWORD=<YOUR_REDSHIFT_PASSWORD>
+
+# Target database, schema, and table names in Redshift
+REDSHIFT_DATABASE=<REDSHIFT_DATABASE_NAME>
+REDSHIFT_SCHEMA=<REDSHIFT_SCHEMA_NAME>
+REDSHIFT_TABLE=<REDSHIFT_TABLE_NAME>
+
+# Networking details for Redshift VPC connectivity
+REDSHIFT_SUBNET_ID=<YOUR_SUBNET_ID>
+REDSHIFT_SECURITY_GROUP_ID=<YOUR_SECURITY_GROUP_ID>
+AVAILABILITY_ZONE=<YOUR_AWS_AZ>
+
+# Comma-separated list of notification email addresses for SNS alerts
+NOTIFICATION_EMAILS=<EMAIL_ADDRESS_1>,<EMAIL_ADDRESS_2>
+
+# AWS region where resources will be deployed
+AWS_REGION=<YOUR_AWS_REGION>
+``` (**\`\`**):**
 
 ```bash
 # Redshift connection URL (JDBC)
