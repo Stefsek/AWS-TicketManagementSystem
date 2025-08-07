@@ -14,18 +14,25 @@ from Utils.timestamp import get_current_timestamp_str
 from pprint import pprint
 
 load_dotenv(override=True)
-
+project_name=os.getenv("PROJECT_NAME")
 # Initialize LLM
 llm = ChatBedrock(model_id="us.amazon.nova-lite-v1:0", temperature=0.7, max_tokens=500)
 
-SENTIMENT_WEIGHTS = {
-    "NEGATIVE": 0.22,        
-    "SLIGHTLY NEGATIVE": 0.28, 
-    "NEUTRAL": 0.30,         
-    "SLIGHTLY POSITIVE": 0.12, 
-    "POSITIVE": 0.08       
-}
+# SENTIMENT_WEIGHTS = {
+#     "NEGATIVE": 0.22,        
+#     "SLIGHTLY NEGATIVE": 0.28, 
+#     "NEUTRAL": 0.30,         
+#     "SLIGHTLY POSITIVE": 0.12, 
+#     "POSITIVE": 0.08       
+# }
 
+SENTIMENT_WEIGHTS = {
+    "NEGATIVE": 1,        
+    "SLIGHTLY NEGATIVE": 0, 
+    "NEUTRAL": 0,         
+    "SLIGHTLY POSITIVE": 0, 
+    "POSITIVE": 0       
+}
 sentiment = random.choices(
     list(SENTIMENT_WEIGHTS.keys()),
     weights=list(SENTIMENT_WEIGHTS.values()),
@@ -64,11 +71,9 @@ chat_prompt = ChatPromptTemplate.from_messages(prompt_messages)
 chain = chat_prompt | llm | ticket_generator_output_parser
 llm_response = chain.invoke({"prompt_text": prompt_text})
 
-
-session = boto3.Session(profile_name="default")
-kinesis = session.client(
+kinesis = boto3.client(
     "kinesis",
-    region_name=os.getenv("AWS_REGION", "us-east-1")
+    region_name=os.getenv("AWS_REGION")
 )
 
 ticket_id=generate_ticket_id()
@@ -79,10 +84,10 @@ record_payload = {
     "submittedAt": submitted_at,
     "data": llm_response['output']
 }
-pprint(llm_response['output']['customer_contact_information'])
+
 # Send to Kinesis using ticket_id as the partition key
 response = kinesis.put_record(
-    StreamName="thesis-ticket-stream",
+    StreamName=f"{project_name}-kinesis-stream",
     Data=json.dumps(record_payload).encode("utf-8"),
     PartitionKey=ticket_id
 )

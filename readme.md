@@ -13,7 +13,7 @@ This project provides an end-to-end **ticket management system** built with the 
 3. **Analyze sentiment** using Amazon Comprehend
 4. **Generate automated responses** via Bedrock LLM (in a Lambda)
 5. **Persist** metadata in **DynamoDB** and full JSON in **S3**
-6. **Notify** stakeholders with **SNS**
+6. **Notify** Notifications with **SNS**
 7. **ETL** all data into **Amazon Redshift** via an **AWS Glue** job
 8. **Monitor** failures with **CloudWatch Alarms**
 
@@ -30,44 +30,47 @@ Below is a simplified flow of how a ticket travels through the system:
             |
             v
 +------------------------------+
-|    Kinesis Data Stream       |
+|    Kinesis Data Stream      |
 +------------------------------+
             |
             v
 +------------------------------+
-|   TriggerSFN Lambda          |
+|   TriggerSFN Lambda         |
 +------------------------------+
             |
             v
 +------------------------------+
-| Step Functions State Machine |
+| Step Functions State Machine|
 +------------------------------+
-       /       |         \
-      v        v          v
+       /       |        \
+      v        v         v
 +-----------+ +------------+ +-------------+
-|Comprehend | |ResponseGen | | S3Writer    |
-|  Detect   | | Lambda     | | Lambda      |
+|Comprehend| |ResponseGen | | S3Writer    |
+| Detect    | | Lambda     | | Lambda      |
 +-----------+ +------------+ +-------------+
-      |           |               |
-      v           v               v
+      |           |              |
+      v           v              v
 +-----------+ +------------+ +-------------+
-| SNS Topic | |  DynamoDB  | |  S3 Bucket  |
+| SNS Topic | | DynamoDB    | | S3 Bucket   |
 +-----------+ +------------+ +-------------+
-      |           |               |
-      v           v               v                  +------------------------------+
-[Email Subs]  (metadata)     (JSON files)  ------>   |   Glue ETL Job → Redshift    |
-                  |                                  +------------------------------+
-                  |                                  
-                  |               
-                  |                
-                  |                 
-                  |                  
-                  |          
-                  |
-                  v
-      +------------------------------+
-      |  CloudWatch Alarm on Fail    |
-      +------------------------------+
+      |           |              |
+      v           v              v
+[Email Subs]  (metadata)   (JSON files)
+      |
+      v
++------------------------------+
+| High Priority Alert → SNS    |
++------------------------------+
+      |
+      v
++------------------------------+
+|   Glue ETL Job → Redshift    |
++------------------------------+
+      |
+      v
++------------------------------+
+|  CloudWatch Alarm on Fail    |
++------------------------------+
 ```
 
 Each numbered step below corresponds to a CDK method in `stack.py`.
@@ -95,6 +98,7 @@ Each numbered step below corresponds to a CDK method in `stack.py`.
   2. **ResponseGenerator** Lambda
   3. **WriteMetadata** (DynamoDB + SNS)
   4. **S3Writer** Lambda
+- **High-Priority Alerts:** f the generated priority is HIGH, the workflow immediately publishes an alert to the SNS topic before continuing the normal flow.
 - **Role:** Permissions for Comprehend, Lambda Invoke, DynamoDB write, SNS publish.
 
 ### 4. Lambda: **ResponseGenerator** (`_create_response_generator_lambda`)
@@ -259,6 +263,9 @@ Once these prerequisites are in place, continue with the setup steps below.
 **Environment Variables (**\.env\**):**
 
 ````bash
+# Unique project/resource name prefix used throughout the CDK stack
+PROJECT_NAME=<YOUR_PROJECT_NAME>
+
 # Redshift connection URL (JDBC)
 REDSHIFT_JDBC_CONNECTION_URL=<YOUR_REDSHIFT_JDBC_URL>
 
@@ -281,16 +288,28 @@ AVAILABILITY_ZONE=<YOUR_AWS_AZ>
 
 # Comma-separated list of notification email addresses for SNS alerts
 NOTIFICATION_EMAILS=<EMAIL_ADDRESS_1>,<EMAIL_ADDRESS_2>
+
+# AWS region where resources will be deployed
+AWS_REGION=<YOUR_AWS_REGION>
 ````
 
 Each variable explained:
 
 - **REDSHIFT\_JDBC\_CONNECTION\_URL**: JDBC endpoint used by Glue to connect and load data into Redshift.
+
 - **REDSHIFT\_ARN**: Amazon Resource Name for your Redshift cluster; needed for Glue to retrieve temporary credentials.
+
 - **REDSHIFT\_USERNAME / REDSHIFT\_PASSWORD**: Authentication details for Redshift; Glue and CDK use these when establishing the connection.
+
 - **REDSHIFT\_DATABASE / SCHEMA / TABLE**: Specify where processed tickets should be loaded in Redshift to organize data.
+
 - **REDSHIFT\_SUBNET\_ID / REDSHIFT\_SECURITY\_GROUP\_ID / AVAILABILITY\_ZONE**: Network settings ensuring Glue jobs can reach Redshift inside a VPC.
+
 - **NOTIFICATION\_EMAILS**: Defines who will receive SNS notifications on Step Function failures or other alerts.
+
+- **AWS\_REGION**: Tells CDK and Lambdas which AWS region to provision and target services in.
+
+- **PROJECT\NAME**: Unique project/resource name prefix used by the CDK stack to consistently name all AWS resources (streams, functions, tables, buckets, etc.).
 
 > **Important:** Never commit real credentials or ARNs to Git. Use the placeholders above in your local `.env`, and add `.env` to your `.gitignore` to keep them safe. git clone ... cd AWS-TicketManagementSystem python3 -m venv .venv && source .venv/bin/activate pip install -r requirements.txt npm install -g aws-cdk cdk bootstrap aws\:/// cdk deploy
 
@@ -311,7 +330,7 @@ Each variable explained:
 ## Cleanup
 
 ```bash
-cdk destroy --force
+cdk destroy
 ````
 
 All AWS resources will be removed, including data in DynamoDB, S3, Glue, etc.

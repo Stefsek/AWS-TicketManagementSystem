@@ -8,15 +8,15 @@ from ticket_management_system.ticket_management_system_stack import TicketManage
 load_dotenv(override=True)
 
 app = cdk.App()
-
+project_name = os.getenv("PROJECT_NAME")
 stack =TicketManagementSystemStack(
     app, 
-    construct_id="ThesisTestStack",
+    construct_id=f"{project_name}Stack",
     env=Environment(
         account=os.getenv("CDK_DEFAULT_ACCOUNT"),
         region=os.getenv("CDK_DEFAULT_REGION")
     ),
-    stack_name=f"ThesisTestStack",
-    description=f"Stef ThesisTestStack",
+    stack_name=f"{project_name}-stack",
+    description=f"AWS real time ticket management system",
 )
 app.synth()

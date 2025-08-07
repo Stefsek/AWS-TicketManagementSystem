@@ -109,6 +109,7 @@ class TicketManagementSystemStack(Stack):
         self.notification_emails = os.getenv("NOTIFICATION_EMAILS")
         emails = os.getenv("NOTIFICATION_EMAILS")
         self.notification_emails = [e.strip() for e in emails.split(",") if e.strip()]
+        self.project_name = os.getenv("PROJECT_NAME")
 
     def _create_kinesis_stream(self) -> None:
         """
@@ -121,8 +122,8 @@ class TicketManagementSystemStack(Stack):
         """
         self.ticket_stream = kinesis.Stream(
             self,
-            "ThesisTicketStream",
-            stream_name="thesis-ticket-stream",
+            f"{self.project_name}KinesisStream",
+            stream_name=f"{self.project_name}-kinesis-stream",
             shard_count=1,
             retention_period=Duration.hours(24),
         )
@@ -145,9 +146,9 @@ class TicketManagementSystemStack(Stack):
         # IAM Role for the Lambda to access Kinesis
         self.event_trigger_role = iam.Role(
             self,
-            "ThesisTicketProcessorRole",
+            f"{self.project_name}SfnTriggerRole",
             assumed_by=iam.ServicePrincipal("lambda.amazonaws.com"),
-            role_name="ThesisTicketProcessorRole"
+            role_name=f"{self.project_name}-sfn-trigger-role"
         )
         # Attach basic execution policy
         self.event_trigger_role.add_managed_policy(
@@ -174,8 +175,8 @@ class TicketManagementSystemStack(Stack):
         # Create the Lambda function itself
         self.event_trigger_lambda = _lambda.Function(
             self,
-            "ThesisTicketProcessorTriggerLambda",
-            function_name="ThesisTicketProcessorTriggerLambda",
+            f"{self.project_name}SfnTrigger",
+            function_name=f"{self.project_name}-sfn-trigger",
             runtime=_lambda.Runtime.PYTHON_3_11,
             handler="handler.lambda_handler",
             code=_lambda.Code.from_asset(
@@ -211,8 +212,8 @@ class TicketManagementSystemStack(Stack):
         # Lambda Layer with shared dependencies for response generation
         self.response_generator_layer = _lambda.LayerVersion(
             self,
-            "ThesisResponseGeneratorLayer",
-            layer_version_name="ThesisResponseGeneratorLayer",
+            f"{self.project_name}ResponseGeneratorLayer",
+            layer_version_name=f"{self.project_name}-response-generator-layer",
             code=_lambda.Code.from_asset(
                 "ticket_management_system/lambda_layers/ResponseGenerator/lambda-layer.zip"
             ),
@@ -223,9 +224,9 @@ class TicketManagementSystemStack(Stack):
         # IAM Role for the Lambda to write logs and invoke Bedrock
         self.response_generator_role = iam.Role(
             self,
-            "ThesisResponseGeneratorRole",
+            f"{self.project_name}ResponseGeneratorRole",
             assumed_by=iam.ServicePrincipal("lambda.amazonaws.com"),
-            role_name="ThesisResponseGeneratorRole"
+            role_name=f"{self.project_name}ResponseGeneratorRole"
         )
         # Logging permissions
         self.response_generator_role.add_to_policy(
@@ -249,8 +250,8 @@ class TicketManagementSystemStack(Stack):
 
         self.response_generator_lambda = _lambda.Function(
             self,
-            "ThesisResponseGeneratorLambda",
-            function_name="ThesisResponseGeneratorLambda",
+            f"{self.project_name}ResponseGenerator",
+            function_name=f"{self.project_name}-response-generator",
             runtime=_lambda.Runtime.PYTHON_3_11,
             handler="handler.lambda_handler",
             code=_lambda.Code.from_asset(
@@ -274,9 +275,9 @@ class TicketManagementSystemStack(Stack):
         # Role for S3 writer
         self.s3_writer_role = iam.Role(
             self,
-            "ThesisS3WriterRole",
+            f"{self.project_name}S3WriterRole",
             assumed_by=iam.ServicePrincipal("lambda.amazonaws.com"),
-            role_name="ThesisS3WriterRole"
+            role_name=f"{self.project_name}-s3-writer-role"
         )
         # Basic execution role
         self.s3_writer_role.add_managed_policy(
@@ -291,8 +292,8 @@ class TicketManagementSystemStack(Stack):
         # Create the Lambda
         self.s3_writer_lambda = _lambda.Function(
             self,
-            "ThesisS3WriterLambda",
-            function_name="ThesisS3WriterLambda",
+            f"{self.project_name}S3Writer",
+            function_name=f"{self.project_name}-s3-writer",
             runtime=_lambda.Runtime.PYTHON_3_11,
             handler="handler.lambda_handler",
             code=_lambda.Code.from_asset(
@@ -316,8 +317,8 @@ class TicketManagementSystemStack(Stack):
         """
         self.tickets_table = dynamodb.Table(
             self,
-            "ThesisTicketsTable",
-            table_name="ThesisTicketsTable",
+            f"{self.project_name}DdbTable",
+            table_name=f"{self.project_name}-ddb-table",
             partition_key=dynamodb.Attribute(
                 name="ticket_id", type=dynamodb.AttributeType.STRING
             ),
@@ -334,8 +335,8 @@ class TicketManagementSystemStack(Stack):
         """
         self.tickets_bucket = s3.Bucket(
             self,
-            "ThesisTicketsBucket",
-            bucket_name="thesis-tickets-bucket",
+            f"{self.project_name}Bucket",
+            bucket_name=f"{self.project_name}-bucket".lower(),
             removal_policy=RemovalPolicy.DESTROY,
             auto_delete_objects=True,
         )
@@ -351,9 +352,9 @@ class TicketManagementSystemStack(Stack):
         """
         self.notification_topic = sns.Topic(
             self,
-            "ThesisTicketNotificationsTopic",
-            topic_name="ThesisTicketNotificationsTopic",
-            display_name="ThesisTicketNotificationsTopic",
+            f"{self.project_name}NotificationsTopic",
+            topic_name=f"{self.project_name}NotificationsTopic",
+            display_name=f"{self.project_name}NotificationsTopic",
         )
 
         self.notification_topic.apply_removal_policy(RemovalPolicy.DESTROY)
@@ -376,10 +377,10 @@ class TicketManagementSystemStack(Stack):
         # Create a JDBC connection for Redshift
         self.redshift_connection = glue.CfnConnection(
             self,
-            "ThesisRedshiftConnection",
+            f"{self.project_name}RedshiftConnection",
             catalog_id=self.account,
             connection_input=glue.CfnConnection.ConnectionInputProperty(
-                name="thesis-redshift-connection",
+                name=f"{self.project_name}-redshift-connection",
                 connection_type="JDBC",
                 connection_properties={
                     "JDBC_CONNECTION_URL": self.redshift_jdbc_url,
@@ -397,9 +398,9 @@ class TicketManagementSystemStack(Stack):
         # IAM Role for Glue job execution
         self.glue_job_role = iam.Role(
             self,
-            "ThesisGlueJobRole",
+            f"{self.project_name}GlueJobRole",
             assumed_by=iam.ServicePrincipal("glue.amazonaws.com"),
-            role_name="ThesisGlueJobRole"
+            role_name=f"{self.project_name}-glue-job-role"
         )
         self.glue_job_role.add_managed_policy(
             iam.ManagedPolicy.from_aws_managed_policy_name("service-role/AWSGlueServiceRole")
@@ -432,8 +433,8 @@ class TicketManagementSystemStack(Stack):
         # Define the Glue job
         self.glue_job = glue.CfnJob(
             self,
-            "ThesisTicketProcessingJob",
-            name="ThesisTicketProcessingJob",
+            f"{self.project_name}Job",
+            name=f"{self.project_name}-job",
             role=self.glue_job_role.role_arn,
             command=glue.CfnJob.JobCommandProperty(
                 name="glueetl",
@@ -465,8 +466,8 @@ class TicketManagementSystemStack(Stack):
         # EventBridge rule to run the job every 2 hours
         self.glue_schedule_rule = events.Rule(
             self,
-            "ThesisGlueJobSchedule",
-            rule_name="ThesisGlueJobSchedule",
+            f"{self.project_name}JobSchedule",
+            rule_name=f"{self.project_name}-job-schedule",
             schedule=events.Schedule.rate(Duration.hours(2)),
             description="Trigger Glue job to process new tickets every 2 hours"
         )
@@ -510,9 +511,9 @@ class TicketManagementSystemStack(Stack):
         # IAM Role for State Machine execution
         self.state_machine_role = iam.Role(
             self,
-            "StateMachineExecutionRole",
+            f"{self.project_name}SfnRole",
             assumed_by=iam.ServicePrincipal("states.amazonaws.com"),
-            role_name="StateMachineExecutionRole"
+            role_name=f"{self.project_name}-sfn-role"
         )
         self.state_machine_role.apply_removal_policy(RemovalPolicy.DESTROY)
 
@@ -551,9 +552,9 @@ class TicketManagementSystemStack(Stack):
         # Create the CloudFormation-based State Machine
         self.state_machine = sfn.CfnStateMachine(
             self,
-            "TicketSentimentStateMachine",
+            f"{self.project_name}Sfn",
             role_arn=self.state_machine_role.role_arn,
-            state_machine_name="ThesisTicketStateMachine",
+            state_machine_name=f"{self.project_name}-sfn",
             state_machine_type="STANDARD",
             definition_string=state_machine_definition,
             definition_substitutions=substitutions,
@@ -593,8 +594,8 @@ class TicketManagementSystemStack(Stack):
         # Alarm if any failures occur
         self.failure_alarm = cloudwatch.Alarm(
             self,
-            "ThesisStateMachineFailureAlarm",
-            alarm_name="ThesisStateMachineFailureAlarm",
+            f"{self.project_name}SfnFailureAlarm",
+            alarm_name=f"{self.project_name}-sfn-failure-alarm",
             metric=failure_metric,
             evaluation_periods=1,
             threshold=0,
