@@ -4,7 +4,7 @@
 
 ---
 
-## 📘 Introduction
+## Introduction
 
 This project provides an end-to-end **ticket management system** built with the AWS Cloud Development Kit (CDK) in Python. It is designed to:
 
@@ -21,7 +21,7 @@ Every resource is defined in the CDK stack (`ticket_management_system/stack.py`)
 
 ---
 
-## 🏛 Architecture Overview
+## Architecture Overview
 
 Below is a simplified flow of how a ticket travels through the system:
 
@@ -72,7 +72,7 @@ Each numbered step below corresponds to a CDK method in `stack.py`.
 
 ---
 
-## 🛠️ AWS Services & Components
+## AWS Services & Components
 
 ### 1. Kinesis Data Stream (`_create_kinesis_stream`)
 
@@ -143,7 +143,7 @@ Each numbered step below corresponds to a CDK method in `stack.py`.
 
 ---
 
-## 📂 Scripts & Code Samples
+## Scripts & Code Samples
 
 ### `scripts/generate_ticket.py`
 
@@ -172,7 +172,7 @@ Each numbered step below corresponds to a CDK method in `stack.py`.
 
 ---
 
-## 🔧 Prerequisites & Setup
+## Prerequisites & Setup
 
 Before deploying this stack, make sure the following AWS resources **already exist** in your account/region:
 
@@ -252,7 +252,7 @@ Before deploying this stack, make sure the following AWS resources **already exi
 
 Once these prerequisites are in place, continue with the setup steps below.
 
-**Environment Variables (**``**):**
+**Environment Variables (**\`\`**):**
 
 ````bash
 # Redshift connection URL (JDBC)
@@ -326,7 +326,7 @@ Each variable explained:
 
 ---
 
-## 🔍 Testing & Validation
+## Testing & Validation
 
 1. **Generate tickets:** `python scripts/generate_ticket.py`
 2. **Monitor:** Kinesis, Lambda logs in CloudWatch
@@ -336,7 +336,7 @@ Each variable explained:
 
 ---
 
-## 🧹 Cleanup
+## Cleanup
 
 ```bash
 cdk destroy --force
