@@ -51,21 +51,23 @@ Below is a simplified flow of how a ticket travels through the system:
       |           |               |
       v           v               v
 +-----------+ +------------+ +-------------+
-|SNS Topic | |DynamoDB    | | S3 Bucket   |
+| SNS Topic | |  DynamoDB  | |  S3 Bucket  |
 +-----------+ +------------+ +-------------+
       |           |               |
-      v           v               v
-[Email Subs]   (metadata)   (JSON files)
-       \           |           /
-        \          v          /
-         +------------------------------+
-         |   Glue ETL Job → Redshift    |
-         +------------------------------+
-                    |
-                    v
-         +------------------------------+
-         |  CloudWatch Alarm on Fail    |
-         +------------------------------+
+      v           v               v                  +------------------------------+
+[Email Subs]  (metadata)     (JSON files)  ------>   |   Glue ETL Job → Redshift    |
+                  |                                  +------------------------------+
+                  |                                  
+                  |               
+                  |                
+                  |                 
+                  |                  
+                  |          
+                  |
+                  v
+      +------------------------------+
+      |  CloudWatch Alarm on Fail    |
+      +------------------------------+
 ```
 
 Each numbered step below corresponds to a CDK method in `stack.py`.
@@ -149,7 +151,7 @@ Each numbered step below corresponds to a CDK method in `stack.py`.
 
 - **Purpose:** Generate realistic dummy tickets with LangChain + Bedrock, then push to Kinesis.
 - **Key Steps:**
-  1. Use `issue_scenarios` library to pick a product and issue type.
+  1. Use `issue_scenarios` dictionary to pick a product and issue type.
   2. Use `TicketGeneratorOutputParser` to format JSON ticket.
   3. Send `put_record` to `thesis-ticket-stream` with payload:
      ```json
@@ -228,31 +230,33 @@ Before deploying this stack, make sure the following AWS resources **already exi
 
    - Any valid email(s) that should receive SNS alerts on workflow failures.
 
-6. **AWS CLI** with proper IAM rights
+6. **AWS Bedrock Access**
+   - Ensure your AWS principal has permissions to invoke AWS Bedrock LLM models (e.g., `nova-pro-v1`) and that Bedrock is enabled in your account.
 
-   - Install the AWS CLI (v2) and configure it with `aws configure` or environment variables.
-   - The CLI credentials must have permissions to bootstrap/pulldown CDK resources and manage: Kinesis, Lambda, Step Functions, DynamoDB, S3, SNS, Glue, EventBridge, CloudWatch, and Redshift.
+7. **AWS CLI** with proper IAM rights
 
-7. **Node.js (v16+) & AWS CDK v2**
+   - Install the AWS CLI (v2) and configure it using aws configure or environment variables. For detailed setup, follow the AWS CLI Quickstart Guide: https://docs.aws.amazon.com/cli/latest/userguide/getting-started-quickstart.html
+
+8. **Node.js (v16+) & AWS CDK v2**
 
    - Install Node.js version 16 or higher.
    - Install the AWS CDK v2 globally (`npm install -g aws-cdk`).
    - This provides the `cdk` command for synthesizing and deploying the infrastructure.
 
-8. **Python 3.11 & Virtual Environment**
+9. **Python 3.11 & Virtual Environment**
 
    - Ensure Python 3.11 is installed on your system.
    - Create and activate a virtual environment (`python3.11 -m venv .venv` & `source .venv/bin/activate`).
    - Install Python dependencies with `pip install -r requirements.txt`.
 
-9. **Docker (optional, for local Lambda testing)**
+10. **Docker (optional, for local Lambda testing)**
 
    - If you want to test Lambdas locally (`cdk synth`, `cdk deploy --watch`), install Docker.
    - CDK can use Docker to build and emulate Lambda runtimes, ensuring compatibility with AWS.
 
 Once these prerequisites are in place, continue with the setup steps below.
 
-**Environment Variables (**\`\`**):**
+**Environment Variables (**\.env\**):**
 
 ````bash
 # Redshift connection URL (JDBC)
@@ -277,37 +281,6 @@ AVAILABILITY_ZONE=<YOUR_AWS_AZ>
 
 # Comma-separated list of notification email addresses for SNS alerts
 NOTIFICATION_EMAILS=<EMAIL_ADDRESS_1>,<EMAIL_ADDRESS_2>
-
-# AWS region where resources will be deployed
-AWS_REGION=<YOUR_AWS_REGION>
-``` (**\`\`**):**
-
-```bash
-# Redshift connection URL (JDBC)
-REDSHIFT_JDBC_CONNECTION_URL=<YOUR_REDSHIFT_JDBC_URL>
-
-# Redshift cluster ARN for Glue authentication
-REDSHIFT_ARN=<YOUR_REDSHIFT_CLUSTER_ARN>
-
-# Credentials to log in to Redshift
-REDSHIFT_USERNAME=<YOUR_REDSHIFT_USERNAME>
-REDSHIFT_PASSWORD=<YOUR_REDSHIFT_PASSWORD>
-
-# Target database, schema, and table names in Redshift
-REDSHIFT_DATABASE=<REDSHIFT_DATABASE_NAME>
-REDSHIFT_SCHEMA=<REDSHIFT_SCHEMA_NAME>
-REDSHIFT_TABLE=<REDSHIFT_TABLE_NAME>
-
-# Networking details for Redshift VPC connectivity
-REDSHIFT_SUBNET_ID=<YOUR_SUBNET_ID>
-REDSHIFT_SECURITY_GROUP_ID=<YOUR_SECURITY_GROUP_ID>
-AVAILABILITY_ZONE=<YOUR_AWS_AZ>
-
-# Comma‑separated list of notification email addresses for SNS alerts
-NOTIFICATION_EMAILS=<EMAIL_ADDRESS_1>,<EMAIL_ADDRESS_2>
-
-# AWS region where resources will be deployed
-AWS_REGION=<YOUR_AWS_REGION>
 ````
 
 Each variable explained:
@@ -318,7 +291,6 @@ Each variable explained:
 - **REDSHIFT\_DATABASE / SCHEMA / TABLE**: Specify where processed tickets should be loaded in Redshift to organize data.
 - **REDSHIFT\_SUBNET\_ID / REDSHIFT\_SECURITY\_GROUP\_ID / AVAILABILITY\_ZONE**: Network settings ensuring Glue jobs can reach Redshift inside a VPC.
 - **NOTIFICATION\_EMAILS**: Defines who will receive SNS notifications on Step Function failures or other alerts.
-- **AWS\_REGION**: Tells CDK and Lambdas which AWS region to provision and target services in.
 
 > **Important:** Never commit real credentials or ARNs to Git. Use the placeholders above in your local `.env`, and add `.env` to your `.gitignore` to keep them safe. git clone ... cd AWS-TicketManagementSystem python3 -m venv .venv && source .venv/bin/activate pip install -r requirements.txt npm install -g aws-cdk cdk bootstrap aws\:/// cdk deploy
 
