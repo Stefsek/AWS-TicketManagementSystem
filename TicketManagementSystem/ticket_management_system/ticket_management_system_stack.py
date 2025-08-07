@@ -106,6 +106,9 @@ class TicketManagementSystemStack(Stack):
         self.redshift_subnet_id = os.getenv("REDSHIFT_SUBNET_ID")
         self.redshift_security_group_id = os.getenv("REDSHIFT_SECURITY_GROUP_ID")
         self.availability_zone = os.getenv("AVAILABILITY_ZONE")
+        self.notification_emails = os.getenv("NOTIFICATION_EMAILS")
+        emails = os.getenv("NOTIFICATION_EMAILS")
+        self.notification_emails = [e.strip() for e in emails.split(",") if e.strip()]
 
     def _create_kinesis_stream(self) -> None:
         """
@@ -354,9 +357,10 @@ class TicketManagementSystemStack(Stack):
         )
 
         self.notification_topic.apply_removal_policy(RemovalPolicy.DESTROY)
-        self.notification_topic.add_subscription(
-            subs.EmailSubscription("schekies@outlook.com.gr")
-        )
+        for email in self.notification_emails:
+            self.notification_topic.add_subscription(
+                subs.EmailSubscription(email)
+            )
 
     def _create_glue_job_and_schedule(self) -> None:
         """
