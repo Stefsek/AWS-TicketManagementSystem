@@ -4,7 +4,7 @@
 
 ---
 
-## Introduction
+## 📘 Introduction
 
 This project provides an end-to-end **ticket management system** built with the AWS Cloud Development Kit (CDK) in Python. It is designed to:
 
@@ -21,55 +21,58 @@ Every resource is defined in the CDK stack (`ticket_management_system/stack.py`)
 
 ---
 
-## Architecture Overview
+## 🏛 Architecture Overview
 
 Below is a simplified flow of how a ticket travels through the system:
 
 ```text
-[Ticket Generator Script]       ┌──────────────────┐
-        │                        │ Kinesis Data      │
-        ▼                        │ Stream (1 shard)  │
-┌────────────────┐               └──────────────────┘
-│ scripts/       │                       │
-│ generate_      │                       ▼
-│ ticket.py      │             ┌──────────────────────────┐
-└────────────────┘             │ TriggerSFN Lambda (Event  │
-        │                      │ filter + Start StepFn)    │
-        ▼                      └──────────────────────────┘
-                              │       ▲
-                              │       │
-                              ▼       │
-                    ┌──────────────────────────┐         ┌──────────┐
-                    │ AWS Step Functions       │ ───────▶│ Comprehend│
-                    │ (State Machine)          │         │ Detect   │
-                    │ 1. DetectSentiment       │         │ Sentiment│
-                    │ 2. Invoke LLM Lambda     │         └──────────┘
-                    │ 3. Write Metadata        │              │
-                    │    to DynamoDB           │              ▼
-                    │ 4. Publish SNS           │         ┌──────────┐
-                    │ 5. Invoke S3Writer       │         │ S3 Bucket│
-                    └──────────────────────────┘         │ (JSON)   │
-                              │                          └──────────┘
-                              ▼                              │
-                        ┌──────────┐                         ▼
-                        │ SNS      │                   ┌────────────┐
-                        │ Topic    │                   │ Glue ETL   │
-                        │ (Email)  │                   │ Job →      │
-                        └──────────┘                   │ Redshift   │
-                              │                        └────────────┘
-                              ▼                              │
-                        [Subscriber]                       ▼
-                                              ┌────────────────────────┐
-                                              │ CloudWatch Alarm on    │
-                                              │ Step Function failure  │
-                                              └────────────────────────┘
+[scripts/generate_ticket.py]
+            |
+            v
++------------------------------+
+|    Kinesis Data Stream       |
++------------------------------+
+            |
+            v
++------------------------------+
+|   TriggerSFN Lambda          |
++------------------------------+
+            |
+            v
++------------------------------+
+| Step Functions State Machine |
++------------------------------+
+       /       |         \
+      v        v          v
++-----------+ +------------+ +-------------+
+|Comprehend | |ResponseGen | | S3Writer    |
+|  Detect   | | Lambda     | | Lambda      |
++-----------+ +------------+ +-------------+
+      |           |               |
+      v           v               v
++-----------+ +------------+ +-------------+
+|SNS Topic | |DynamoDB    | | S3 Bucket   |
++-----------+ +------------+ +-------------+
+      |           |               |
+      v           v               v
+[Email Subs]   (metadata)   (JSON files)
+       \           |           /
+        \          v          /
+         +------------------------------+
+         |   Glue ETL Job → Redshift    |
+         +------------------------------+
+                    |
+                    v
+         +------------------------------+
+         |  CloudWatch Alarm on Fail    |
+         +------------------------------+
 ```
 
 Each numbered step below corresponds to a CDK method in `stack.py`.
 
 ---
 
-## AWS Services & Components
+## 🛠️ AWS Services & Components
 
 ### 1. Kinesis Data Stream (`_create_kinesis_stream`)
 
@@ -140,7 +143,7 @@ Each numbered step below corresponds to a CDK method in `stack.py`.
 
 ---
 
-## Scripts & Code Samples
+## 📂 Scripts & Code Samples
 
 ### `scripts/generate_ticket.py`
 
@@ -169,14 +172,17 @@ Each numbered step below corresponds to a CDK method in `stack.py`.
 
 ---
 
-## Prerequisites & Setup
+## 🔧 Prerequisites & Setup
 
 Before deploying this stack, make sure the following AWS resources **already exist** in your account/region:
 
 1. **Amazon Redshift Cluster**
+
    - A provisioned Redshift cluster to host your data warehouse.
    - Note its **JDBC endpoint** (for `REDSHIFT_JDBC_CONNECTION_URL`) and cluster **ARN** (`REDSHIFT_ARN`).
+
 2. **Database, Schema & Table** in Redshift
+
    - Create the target database (e.g. `data`).
    - Create or grant privileges on the schema (e.g. `demo_workspace`).
    - Create the empty table (e.g. `processed_tickets`) with columns matching the Glue schema. A SQL script is provided in the `sql` folder (`sql/create_processed_tickets.sql`) containing:
@@ -205,40 +211,50 @@ Before deploying this stack, make sure the following AWS resources **already exi
      )
      DISTSTYLE AUTO;
      ```
+
 3. **VPC Networking**
+
    - At least one **subnet** (ID for `REDSHIFT_SUBNET_ID`) in the cluster’s VPC.
    - A **security group** (ID for `REDSHIFT_SECURITY_GROUP_ID`) allowing inbound JDBC traffic.
    - Ensure your subnet’s AZ matches `AVAILABILITY_ZONE` used by the cluster.
+
 4. **IAM Permissions**
+
    - Your AWS user or role must be able to:
      - Create and manage all CDK resources (Lambda, Kinesis, Glue, etc.).
      - Read/write to the existing Redshift cluster via Glue’s IAM role.
+
 5. **Email Addresses** for Notifications
+
    - Any valid email(s) that should receive SNS alerts on workflow failures.
 
 6. **AWS CLI** with proper IAM rights
+
    - Install the AWS CLI (v2) and configure it with `aws configure` or environment variables.
    - The CLI credentials must have permissions to bootstrap/pulldown CDK resources and manage: Kinesis, Lambda, Step Functions, DynamoDB, S3, SNS, Glue, EventBridge, CloudWatch, and Redshift.
 
 7. **Node.js (v16+) & AWS CDK v2**
+
    - Install Node.js version 16 or higher.
    - Install the AWS CDK v2 globally (`npm install -g aws-cdk`).
    - This provides the `cdk` command for synthesizing and deploying the infrastructure.
 
 8. **Python 3.11 & Virtual Environment**
+
    - Ensure Python 3.11 is installed on your system.
    - Create and activate a virtual environment (`python3.11 -m venv .venv` & `source .venv/bin/activate`).
    - Install Python dependencies with `pip install -r requirements.txt`.
 
 9. **Docker (optional, for local Lambda testing)**
+
    - If you want to test Lambdas locally (`cdk synth`, `cdk deploy --watch`), install Docker.
    - CDK can use Docker to build and emulate Lambda runtimes, ensuring compatibility with AWS.
 
 Once these prerequisites are in place, continue with the setup steps below.
 
-**Environment Variables (`.env`):**
+**Environment Variables (**``**):**
 
-```bash
+````bash
 # Redshift connection URL (JDBC)
 REDSHIFT_JDBC_CONNECTION_URL=<YOUR_REDSHIFT_JDBC_URL>
 
@@ -292,7 +308,7 @@ NOTIFICATION_EMAILS=<EMAIL_ADDRESS_1>,<EMAIL_ADDRESS_2>
 
 # AWS region where resources will be deployed
 AWS_REGION=<YOUR_AWS_REGION>
-```
+````
 
 Each variable explained:
 
@@ -310,7 +326,7 @@ Each variable explained:
 
 ---
 
-## Testing & Validation
+## 🔍 Testing & Validation
 
 1. **Generate tickets:** `python scripts/generate_ticket.py`
 2. **Monitor:** Kinesis, Lambda logs in CloudWatch
