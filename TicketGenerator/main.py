@@ -16,83 +16,96 @@ from Utils.timestamp import get_current_timestamp_str
 from pprint import pprint
 
 load_dotenv(override=True)
-project_name=os.getenv("PROJECT_NAME")
-# Initialize LLM
+
+# Load project name from environment variables
+project_name = os.getenv("PROJECT_NAME")
+
+# Initialize LLM with chosen model, temperature, and max token length
 llm = ChatBedrock(model_id="us.amazon.nova-lite-v1:0", temperature=0.7, max_tokens=500)
 
+# Define sentiment weights (used to randomly assign a sentiment to the ticket)
 SENTIMENT_WEIGHTS = {
-    "NEGATIVE": 0.22,        
-    "SLIGHTLY NEGATIVE": 0.28, 
-    "NEUTRAL": 0.30,         
-    "SLIGHTLY POSITIVE": 0.12, 
-    "POSITIVE": 0.08       
+    "NEGATIVE": 0.22,
+    "SLIGHTLY NEGATIVE": 0.28,
+    "NEUTRAL": 0.30,
+    "SLIGHTLY POSITIVE": 0.12,
+    "POSITIVE": 0.08
 }
-results = []  # collect ground truth per ticket
 
-for i in range(100):
-    sentiment = random.choices(
-        list(SENTIMENT_WEIGHTS.keys()),
-        weights=list(SENTIMENT_WEIGHTS.values()),
-        k=1
-    )[0]
+# Randomly select one sentiment based on weights
+sentiment = random.choices(
+    list(SENTIMENT_WEIGHTS.keys()),
+    weights=list(SENTIMENT_WEIGHTS.values()),
+    k=1
+)[0]
 
-    scenario = random.choice(issue_scenarios)
-    product = (scenario.get("product"),)
-    print(f"Selected Sentiment:{sentiment}")
-    print(f"Selected Product:{scenario.get('product')}")
-    print(f"Selected issue Type:{scenario.get('issue_type')}")
-    print("\n")
-    issue_type = scenario.get("issue_type")
-    formatted_task = TICKET_GENERATOR_TASK.format(
-        sentiment=sentiment,
-        product=scenario.get("product"),
-        issue_type=scenario.get("issue_type"),
-    )
+# Randomly pick one issue scenario
+scenario = random.choice(issue_scenarios)
 
-    formatted_guidelines = TICKET_GENERATOR_GUIDELINES.format(sentiment=sentiment)
+# Debug info: print selected attributes
+print(f"Selected Sentiment: {sentiment}")
+print(f"Selected Product: {scenario.get('product')}")
+print(f"Selected Issue Type: {scenario.get('issue_type')}")
+print("\n")
 
-    prompt_text = PromptTemplate.from_template(TICKET_GENERATOR_TEMPLATE).format(
-        task=formatted_task,
-        guidelines=formatted_guidelines,
-        examples=TICKET_GENERATOR_EXAMPLES,
-        format_instructions=ticket_generator_output_parser.get_format_instructions(),
-    )
-    prompt_messages = [
-        ("system", TICKET_GENERATOR_SYSTEM_ROLE),
-        (
-            "human",
-            [{"type": "text", "text": "{prompt_text}"}],
-        ),
-    ]
-    chat_prompt = ChatPromptTemplate.from_messages(prompt_messages)
-    chain = chat_prompt | llm | ticket_generator_output_parser
-    llm_response = chain.invoke({"prompt_text": prompt_text})
+# Extract issue type
+issue_type = scenario.get("issue_type")
 
-    kinesis = boto3.client(
-        "kinesis",
-        region_name=os.getenv("AWS_REGION")
-    )
+# Format the task prompt with chosen sentiment, product, and issue type
+formatted_task = TICKET_GENERATOR_TASK.format(
+    sentiment=sentiment,
+    product=scenario.get("product"),
+    issue_type=issue_type,
+)
 
-    ticket_id=generate_ticket_id()
-    submitted_at=get_current_timestamp_str()
-    record_payload = {
-        "eventName": "TicketSubmitted",
-        "ticketId": ticket_id,
-        "submittedAt": submitted_at,
-        "data": llm_response['output']
-    }
+# Format guidelines with chosen sentiment
+formatted_guidelines = TICKET_GENERATOR_GUIDELINES.format(sentiment=sentiment)
 
-    # Send to Kinesis using ticket_id as the partition key
-    response = kinesis.put_record(
-        StreamName=f"{project_name}-kinesis-stream",
-        Data=json.dumps(record_payload).encode("utf-8"),
-        PartitionKey=ticket_id
-    )
-    results.append({
-        "ticket_id": ticket_id,
-        "sentiment_target": sentiment
-    })
+# Build the full prompt for the LLM
+prompt_text = PromptTemplate.from_template(TICKET_GENERATOR_TEMPLATE).format(
+    task=formatted_task,
+    guidelines=formatted_guidelines,
+    examples=TICKET_GENERATOR_EXAMPLES,
+    format_instructions=ticket_generator_output_parser.get_format_instructions(),
+)
 
-with open('results.pkl', 'wb') as f:
-    pickle.dump(results, f)
+# Define system + human roles for the conversation
+prompt_messages = [
+    ("system", TICKET_GENERATOR_SYSTEM_ROLE),
+    (
+        "human",
+        [{"type": "text", "text": "{prompt_text}"}],  # placeholder for actual prompt text
+    ),
+]
 
+# Build LangChain pipeline: prompt → LLM → parser
+chat_prompt = ChatPromptTemplate.from_messages(prompt_messages)
+chain = chat_prompt | llm | ticket_generator_output_parser
+
+# Run the chain and get generated ticket response
+llm_response = chain.invoke({"prompt_text": prompt_text})
+
+# Initialize Kinesis client
+kinesis = boto3.client(
+    "kinesis",
+    region_name=os.getenv("AWS_REGION")
+)
+
+# Generate unique ticket ID and timestamp
+ticket_id = generate_ticket_id()
+submitted_at = get_current_timestamp_str()
+
+# Build payload to send to Kinesis
+record_payload = {
+    "eventName": "TicketSubmitted",
+    "ticketId": ticket_id,
+    "submittedAt": submitted_at,
+    "data": llm_response['output']
+}
+
+# Send record to Kinesis stream (partitioned by ticket_id)
+response = kinesis.put_record(
+    StreamName=f"{project_name}-kinesis-stream",
+    Data=json.dumps(record_payload).encode("utf-8"),
+    PartitionKey=ticket_id
+)

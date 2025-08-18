@@ -149,11 +149,13 @@ Each numbered step below corresponds to a CDK method in `stack.py`.
 
 ---
 
-## Scripts & Code Samples
+## Scripts
 
-### `scripts/generate_ticket.py`
+### `TicketGenerator/main.py`
 
-- **Purpose:** Generate realistic dummy tickets with LangChain + Bedrock, then push to Kinesis.
+- **Purpose:** Generate realistic dummy tickets with LangChain + Bedrock, then push to Kinesis.  
+  - ⚠️ Requires **AWS Bedrock access** with permissions to invoke Nova models.  
+  - If Bedrock is unavailable, you can substitute another LLM provider (e.g., OpenAI GPT) — update the code accordingly and supply the necessary API key.  
 - **Key Steps:**
   1. Use `issue_scenarios` dictionary to pick a product and issue type.
   2. Use `TicketGeneratorOutputParser` to format JSON ticket.
@@ -162,14 +164,36 @@ Each numbered step below corresponds to a CDK method in `stack.py`.
      { "eventName": "TicketSubmitted", "ticketId": "TKT-...", "submittedAt": "ISO...", "data": {...} }
      ```
 
-### Glue Script: `glue_scripts/ticket_processing_job.py`
+### `TicketResponseEvaluator/main.py`
 
-- **get\_ticket\_schema():** Defines Spark schema for all fields.
-- **read\_tickets\_from\_s3():** Reads S3 JSON under `/tickets/`.
-- **apply\_schema\_casting():** Cast raw types to proper Spark types.
-- **validate\_no\_nulls():** Checks no required column is null.
-- **write\_to\_redshift():** Uses `write_dynamic_frame.from_jdbc_conf` to load into Redshift.
-- **process\_tickets():** Orchestrates extract → transform → load.
+- **Purpose:** Evaluate the quality of LLM-generated ticket responses against strict AWS Support standards.  
+  - ⚠️ Requires **AWS Bedrock access** with permissions to invoke Nova models.  
+  - If Bedrock is unavailable, you can substitute another LLM provider (e.g., OpenAI GPT) — update the code accordingly and supply the necessary API key.  
+- **Inputs:** Processed tickets stored in `ProcessedTickets/processed_tickets000.json`.  
+
+- **Evaluation Criteria (booleans only):**
+  1. **contextual_relevance** – Response explicitly acknowledges the AWS service/problem in the ticket.  
+  2. **technical_accuracy** – All AWS details are factually correct, safe, and applicable.  
+  3. **professional_tone** – Tone is formal, polite, and consistent with AWS support standards.  
+  4. **actionable_guidance** – Response provides 2–3 specific, executable troubleshooting steps.  
+
+- **Workflow:**
+  1. Load processed tickets (JSON lines).  
+  2. Build strict evaluation prompt (`Prompts/ticket_response_evaluator_prompts.py`).  
+  3. Run evaluation with **AWS Bedrock** (`us.amazon.nova-pro-v1:0`).  
+  4. Parse output using schema in `Schemas/ticket_response_evaluator_output_parser.py`.  
+  5. Save evaluations to `ticket_evaluations.pkl`.  
+
+- **Example Output:**
+  ```json
+  {
+    "output": {
+      "contextual_relevance": true,
+      "technical_accuracy": true,
+      "professional_tone": true,
+      "actionable_guidance": false
+    }
+  }
 
 ### CDK Entry (`app.py` / `cdk.json`)
 
@@ -239,7 +263,9 @@ Before deploying this stack, make sure the following AWS resources **already exi
 
 7. **AWS CLI** with proper IAM rights
 
-   - Install the AWS CLI (v2) and configure it using aws configure or environment variables. For detailed setup, follow the AWS CLI Quickstart Guide: https://docs.aws.amazon.com/cli/latest/userguide/getting-started-quickstart.html
+   - Install the AWS CLI (v2) and configure it using `aws configure` or environment variables.  
+   - You must create an **AWS CLI named profile** with your **Access Key ID** and **Secret Access Key**, ensuring it has sufficient IAM permissions to deploy and manage the resources in this project.  
+   - For detailed setup, follow the AWS CLI Quickstart Guide: https://docs.aws.amazon.com/cli/latest/userguide/getting-started-quickstart.html
 
 8. **Node.js (v16+) & AWS CDK v2**
 
@@ -314,13 +340,18 @@ Each variable explained:
 > **Important:** Never commit real credentials or ARNs to Git. Use the placeholders above in your local `.env`, and add `.env` to your `.gitignore` to keep them safe. git clone ... cd AWS-TicketManagementSystem python3 -m venv .venv && source .venv/bin/activate pip install -r requirements.txt npm install -g aws-cdk cdk bootstrap aws\:/// cdk deploy
 
 ````
+## Deploy
+
+```bash
+cdk deploy
+````
 
 ---
 
 ## Testing & Validation
 
-1. **Generate tickets:** `python scripts/generate_ticket.py`
-2. **Monitor:** Kinesis, Lambda logs in CloudWatch
+1. **Generate tickets:** `TicketGenerator/main.py`
+2. **Monitor:** Kinesis, State Machine,Lambda logs in CloudWatch
 3. **Verify:** DynamoDB table entries & S3 JSON files
 4. **Check ETL:** Glue job runs and data appears in Redshift
 5. **Alarm:** Force a Step Function error to test SNS email
