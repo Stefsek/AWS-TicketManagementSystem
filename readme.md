@@ -165,7 +165,7 @@ Each numbered step below corresponds to a CDK method in `stack.py`.
 - **Key Steps:**
   1. Use `issue_scenarios` dictionary to pick a product and issue type.
   2. Use `TicketGeneratorOutputParser` to format JSON ticket.
-  3. Send `put_record` to `thesis-ticket-stream` with payload:
+  3. Send `put_record` to `kinesis-stream` with payload:
      ```json
      { "eventName": "TicketSubmitted", "ticketId": "TKT-...", "submittedAt": "ISO...", "data": {...} }
      ```
