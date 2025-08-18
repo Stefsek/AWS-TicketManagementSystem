@@ -354,7 +354,7 @@ cdk deploy
 2. **Monitor:** Kinesis, State Machine,Lambda logs in CloudWatch
 3. **Verify:** DynamoDB table entries & S3 JSON files
 4. **Check ETL:** Glue job runs and data appears in Redshift
-5. **Alarm:** Force a Step Function error to test SNS email
+5. **Alarm:** Force a Step Function error to test SNS email,get notifications for HIGH priority labelled tickets
 
 ---
 
