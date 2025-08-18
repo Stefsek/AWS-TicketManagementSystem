@@ -26,7 +26,7 @@ Every resource is defined in the CDK stack (`ticket_management_system/stack.py`)
 Below is a simplified flow of how a ticket travels through the system:
 
 ```text
-[scripts/generate_ticket.py]
+[TicketGenerator/main.py]
             |
             v
 +------------------------------+
