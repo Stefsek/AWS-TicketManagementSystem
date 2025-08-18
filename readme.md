@@ -339,7 +339,7 @@ Each variable explained:
 
 > **Important:** Never commit real credentials or ARNs to Git. Use the placeholders above in your local `.env`, and add `.env` to your `.gitignore` to keep them safe. git clone ... cd AWS-TicketManagementSystem python3 -m venv .venv && source .venv/bin/activate pip install -r requirements.txt npm install -g aws-cdk cdk bootstrap aws\:/// cdk deploy
 
-````
+
 ## Deploy
 
 ```bash
