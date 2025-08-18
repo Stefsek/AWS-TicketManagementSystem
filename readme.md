@@ -11,7 +11,7 @@ This project provides an end-to-end **ticket management system** built with the 
 1. **Ingest** incoming support tickets via **Kinesis Data Stream**
 2. **Orchestrate** processing with **Step Functions**
 3. **Analyze sentiment** using Amazon Comprehend
-4. **Generate first response ai messages** via Bedrock LLM (in a Lambda)
+4. **Generate first ai response messages** via Bedrock LLM (in a Lambda)
 5. **Persist** metadata in **DynamoDB** and full JSON in **S3**
 6. **Notify** Notifications with **SNS**
 7. **ETL** all data into **Amazon Redshift** via an **AWS Glue** job
