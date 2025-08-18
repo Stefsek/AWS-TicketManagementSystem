@@ -11,7 +11,7 @@ This project provides an end-to-end **ticket management system** built with the 
 1. **Ingest** incoming support tickets via **Kinesis Data Stream**
 2. **Orchestrate** processing with **Step Functions**
 3. **Analyze sentiment** using Amazon Comprehend
-4. **Generate automated responses** via Bedrock LLM (in a Lambda)
+4. **Generate first response ai messages** via Bedrock LLM (in a Lambda)
 5. **Persist** metadata in **DynamoDB** and full JSON in **S3**
 6. **Notify** Notifications with **SNS**
 7. **ETL** all data into **Amazon Redshift** via an **AWS Glue** job
@@ -125,13 +125,19 @@ Each numbered step below corresponds to a CDK method in `stack.py`.
 - **Role Permissions:** Write to S3 bucket.
 - **Behavior:** Receives full ticket + LLM + sentiment output, transforms to flat JSON, stores under `tickets/YYYY/MM/DD/ticket_<ID>.json`.
 
-### 8. S3 Bucket (`_create_s3_bucket`)
+### 8. Lambda: **TriggerSFN** (`_create_event_trigger_lambda`)
+
+- **Code:** `ticket_management_system/lambdas/TriggerSFN/handler.py`
+- **Role Permissions:** Triggers the state machine.
+- **Behavior:** Starts by receiving a ticket with specific event name and triggers the state machine. 
+
+### 9. S3 Bucket (`_create_s3_bucket`)
 
 - **Name:** `thesis-tickets-bucket`
 - **Config:** Auto-delete objects on stack destroy.
 - **Purpose:** Long‑term storage of processed ticket JSON.
 
-### 9. AWS Glue Job & Schedule (`_create_glue_job_and_schedule`)
+### 10. AWS Glue Job & Schedule (`_create_glue_job_and_schedule`)
 
 - **Glue Connection:** JDBC → Redshift using `.env` variables.
 - **Glue Script:** `ticket_management_system/glue_scripts/ticket_processing_job.py`
@@ -141,7 +147,7 @@ Each numbered step below corresponds to a CDK method in `stack.py`.
 - **Schedule:** EventBridge rule triggers every 2 hours.
 - **IAM:** S3 read/write, Redshift credentials, Glue service role.
 
-### 10. CloudWatch Alarm (`_create_failure_alarm`)
+### 11. CloudWatch Alarm (`_create_failure_alarm`)
 
 - **Metric:** `AWS/States.ExecutionsFailed` for the state machine.
 - **Threshold:** >0 failures in 1 minute.
